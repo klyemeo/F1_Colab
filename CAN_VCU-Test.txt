@@ -1,0 +1,134 @@
+#include "CAN_config.h"
+#include "ESP32CAN.h"
+
+float hexToFloat(uint32_t hexValue);
+
+// REQUIRE:
+// ESP32 by Espressif
+// 2.0.17
+
+// CAN1: TJA1050 parameters
+#define CAN_TX_PIN GPIO_NUM_27
+#define CAN_RX_PIN GPIO_NUM_26
+CAN_device_t CAN_cfg;             // CAN Config
+const int    rx_queue_size = 10;  // Receive Queue size
+
+static unsigned long previousMillis50   = 0;   // will store last time a 50ms CAN Message was send
+static unsigned long previousMillis500  = 0;   // will store last time a 50ms CAN Message was send
+static unsigned long previousMillis1000 = 0;   // will store last time a 50ms CAN Message was send
+
+void setup() {
+  Serial.begin(115200);
+  Serial.println("WELCOME USB CAN-MESSAGE MONITORING");
+  Serial.println("by");
+  Serial.println("DR.ANUCHA PROMWUNGKWA");
+  Serial.println("USB SERIAL: 115200 bps");
+  Serial.println("CAN SPEED: 500 kbps");
+  delay(3000);
+
+  // CAN1
+  CAN_cfg.speed = CAN_SPEED_500KBPS;
+  CAN_cfg.tx_pin_id = CAN_TX_PIN;
+  CAN_cfg.rx_pin_id = CAN_RX_PIN;
+  CAN_cfg.rx_queue = xQueueCreate(rx_queue_size, sizeof(CAN_frame_t));
+  // Init CAN Module
+  ESP32Can.CANInit();
+}
+
+void loop() {
+  CAN_frame_t rx_frame;
+
+  if (xQueueReceive(CAN_cfg.rx_queue, &rx_frame, 3 * portTICK_PERIOD_MS) == pdTRUE) {
+
+    if (rx_frame.FIR.B.FF == CAN_frame_std) {
+      printf("New standard frame");
+    } else {
+      printf("New extended frame");
+    }
+
+    if (rx_frame.FIR.B.RTR == CAN_RTR) {
+      printf(" RTR from 0x%08X, DLC %d\r\n", rx_frame.MsgID, rx_frame.FIR.B.DLC);
+    } else {
+      printf(" from 0x%08X, DLC %d, Data ", rx_frame.MsgID, rx_frame.FIR.B.DLC);
+      for (int i = 0; i < rx_frame.FIR.B.DLC; i++) {
+        printf("0x%02X ", rx_frame.data.u8[i]);
+      }
+      printf("\n");
+
+      // ====== Decode CAN ID: 0x7E1 ======
+      if (rx_frame.MsgID == 0x7E1) {
+        uint16_t raw = rx_frame.data.u8[0] | (rx_frame.data.u8[1] << 8);
+        float voltage = raw * 0.1; // Example: 923 → 92.3V
+        Serial.print(" -> Udc (V): ");
+        Serial.println(voltage, 1);
+      }
+
+      // ====== Decode CAN ID: 0x7E2 ======
+      if (rx_frame.MsgID == 0x7E2) {
+        uint16_t raw = rx_frame.data.u8[0] | (rx_frame.data.u8[1] << 8);
+        float current = raw * 0.1;
+        Serial.print(" -> Idc (A): ");
+        Serial.println(current, 1);
+      }
+      // ====== Decode CAN ID: 0x7E3 ======
+      if (rx_frame.MsgID == 0x7E3) {
+        int16_t speed = rx_frame.data.u8[0] | (rx_frame.data.u8[1] << 8);
+        // float speed = raw;
+        Serial.print(" -> speed (rpm): ");
+        Serial.println(speed);
+      }
+      // ====== Decode CAN ID: 0x7E4 ======
+      if (rx_frame.MsgID == 0x7E4) {
+        int16_t tmpm = rx_frame.data.u8[0] | (rx_frame.data.u8[1] << 8);
+        // float tmpm = raw;
+        Serial.print(" -> tmpm (C): ");
+        Serial.println(tmpm);
+      }
+      // ====== Decode CAN ID: 0x7E5 ======
+      if (rx_frame.MsgID == 0x7E5) {
+        int16_t tmphs = rx_frame.data.u8[0] | (rx_frame.data.u8[1] << 8);
+        // float  = raw;
+        Serial.print(" -> tmphs (C): ");
+        Serial.println(tmphs);
+      }
+      if (rx_frame.MsgID == 0x7E6) {
+        int16_t lasterr = rx_frame.data.u8[0] | (rx_frame.data.u8[1] << 8);
+        // float  = raw;
+        Serial.print(" -> lasterr (A): ");
+        Serial.println(lasterr);
+      }
+      if (rx_frame.MsgID == 0x7E7) {
+        int16_t gerrer = rx_frame.data.u8[0] | (rx_frame.data.u8[1] << 8);
+        // float  = raw;
+        Serial.print(" -> gerrer (A): ");
+        Serial.println(gerrer*0.1);
+      }
+      if (rx_frame.MsgID == 0x7E8) {
+        int16_t uaux = rx_frame.data.u8[0] | (rx_frame.data.u8[1] << 8);
+        // float  = raw;
+        Serial.print(" -> uaux (V): ");
+        Serial.println(uaux*0.1,1);
+      }
+      if (rx_frame.MsgID == 0x7E9) {
+        int16_t dir = rx_frame.data.u8[0] | (rx_frame.data.u8[1] << 8);
+        // float  = raw;
+        Serial.print(" -> dir (-): ");
+        Serial.println(dir);
+      }
+      if (rx_frame.MsgID == 0x7EA) {
+        int16_t opmode = rx_frame.data.u8[0] | (rx_frame.data.u8[1] << 8);
+        // float  = raw;
+        Serial.print(" -> opmode (-): ");
+        Serial.println(opmode);
+      }
+
+    }
+  }
+}
+
+
+float hexToFloat(uint32_t hexValue) {
+  float floatValue;
+  memcpy(&floatValue, &hexValue, sizeof(float));
+  return floatValue;
+}
