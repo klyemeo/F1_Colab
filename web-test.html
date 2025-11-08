@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>P32 Firebase Data</title>
+</head>
+<body>
+  <h1>ข้อมูลจาก Firebase</h1>
+  <p><strong>Current:</strong> <span id="current">--</span> A</p>
+  <p><strong>Voltage:</strong> <span id="voltage">--</span> V</p>
+  <p><strong>Timestamp:</strong> <span id="timestamp">--</span> s</p>
+
+  <script>
+    async function fetchData() {
+      const url = "https://test-data-f19-default-rtdb.asia-southeast1.firebasedatabase.app/ESP32_Data/Location1.json";
+      const response = await fetch(url);
+      const data = await response.json();
+
+      document.getElementById("current").textContent = data.Current;
+      document.getElementById("voltage").textContent = data.Voltage;
+      document.getElementById("timestamp").textContent = data.Timestamp;
+    }
+
+    setInterval(fetchData, 5000); // ดึงข้อมูลทุก 5 วินาที
+    fetchData(); // ดึงข้อมูลครั้งแรก
+  </script>
+</body>
+</html>ES
