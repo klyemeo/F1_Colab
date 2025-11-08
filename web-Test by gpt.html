@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <title>ข้อมูลจาก ESP32 - Firebase</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- ฟอนต์ Google -->
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun&display=swap" rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      font-family: "Sarabun", sans-serif;
+      background: linear-gradient(to right, #e0f7fa, #ffffff);
+      color: #333;
+      padding: 40px 20px;
+      margin: 0;
+    }
+    h1 {
+      color: #0077b6;
+      margin-bottom: 30px;
+      text-align: center;
+    }
+    .container {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 20px;
+    }
+    .card {
+      background: #ffffff;
+      border-radius: 12px;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+      padding: 25px;
+      width: 280px;
+      text-align: center;
+      transition: transform 0.2s ease;
+    }
+    .card:hover {
+      transform: translateY(-5px);
+    }
+    .label {
+      font-size: 1rem;
+      color: #555;
+    }
+    .value {
+      font-size: 2.5rem;
+      font-weight: bold;
+      color: #0077b6;
+      margin: 10px 0;
+    }
+    footer {
+      margin-top: 50px;
+      text-align: center;
+      font-size: 0.9rem;
+      color: #888;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>ข้อมูลจาก ESP32 (Firebase)</h1>
+
+  <div class="container">
+    <div class="card">
+      <div class="label">กระแส (Current)</div>
+      <div class="value" id="current">--</div>
+      <div class="label">แอมป์ (A)</div>
+    </div>
+
+    <div class="card">
+      <div class="label">แรงดัน (Voltage)</div>
+      <div class="value" id="voltage">--</div>
+      <div class="label">โวลต์ (V)</div>
+    </div>
+
+    <div class="card">
+      <div class="label">เวลา (Timestamp)</div>
+      <div class="value" id="timestamp">--</div>
+      <div class="label">วินาทีหลังจากเริ่มต้น ESP32</div>
+    </div>
+  </div>
+
+  <footer>
+    แสดงผลข้อมูลเรียลไทม์จาก Firebase | อัปเดตทุก 1 วินาที
+  </footer>
+
+  <script>
+    async function fetchData() {
+      try {
+        const res = await fetch('https://test-data-f19-default-rtdb.asia-southeast1.firebasedatabase.app/ESP32_Data/Location1.json');
+        const data = await res.json();
+
+        document.getElementById("current").textContent = data.Current?.toFixed(2) ?? "--";
+        document.getElementById("voltage").textContent = data.Voltage?.toFixed(2) ?? "--";
+        document.getElementById("timestamp").textContent = data.Timestamp ?? "--";
+      } catch (error) {
+        console.error("เกิดข้อผิดพลาดในการโหลดข้อมูล:", error);
+      }
+    }
+
+    // โหลดครั้งแรก และโหลดใหม่ทุก 1 วินาที
+    fetchData();
+    setInterval(fetchData, 1000);
+  </script>
+
+</body>
+</html>
