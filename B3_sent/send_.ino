@@ -11,7 +11,7 @@ struct can_frame canMsgRecv;
 void setup() {
   Serial.begin(115200);
   SPI.begin();
-  
+     
   mcp2515.reset();
   // Ensure you match your module's crystal (8MHz or 16MHz)
   mcp2515.setBitrate(CAN_500KBPS, MCP_8MHZ); 
