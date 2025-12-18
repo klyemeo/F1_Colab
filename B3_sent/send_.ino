@@ -1,41 +1,46 @@
 #include <SPI.h>
-#include <mcp_can.h>
+#include <mcp2515.h>
 
-const int SPI_CS_PIN = 5;
-MCP_CAN CAN(SPI_CS_PIN); 
+// Pins for Node 1
+const int CS_PIN = 5;
+MCP2515 mcp2515(CS_PIN);
+
+struct can_frame canMsgSend;
+struct can_frame canMsgRecv;
 
 void setup() {
   Serial.begin(115200);
-  // Initialize MCP2515 at 500kbps and 8MHz (check your crystal on the module!)
-  while (CAN_OK != CAN.begin(MCP_ANY, CAN_500KBPS, MCP_8MHZ)) {
-    Serial.println("MCP2515 Init Failed, Retrying...");
-    delay(100);
-  }
-  CAN.setMode(MCP_NORMAL);
-  Serial.println("MCP2515 Initialized");
+  SPI.begin();
+  
+  mcp2515.reset();
+  // Ensure you match your module's crystal (8MHz or 16MHz)
+  mcp2515.setBitrate(CAN_500KBPS, MCP_8MHZ); 
+  mcp2515.setNormalMode();
+  
+  Serial.println("Node 1 (MCP2515) Ready");
 }
 
 void loop() {
   // 1. Send Sensor Data
   static uint32_t lastSend = 0;
   if (millis() - lastSend > 1000) {
-    float sensorVal = 25.5; // Replace with your sensor read
-    byte data[4];
-    memcpy(data, &sensorVal, 4);
-    CAN.sendMsgBuf(0x101, 0, 4, data); 
+    float sensorValue = 12.34; // Placeholder for sensor logic
+    
+    canMsgSend.can_id  = 0x101; // ID of this node
+    canMsgSend.can_dlc = 4;
+    memcpy(canMsgSend.data, &sensorValue, 4);
+    
+    if (mcp2515.sendMessage(&canMsgSend) == MCP2515::ERROR_OK) {
+      Serial.println("Sent: 0x101");
+    }
     lastSend = millis();
   }
 
   // 2. Receive Data
-  long unsigned int rxId;
-  unsigned char len = 0;
-  unsigned char rxBuf[8];
-
-  if (CAN_MSGAVAIL == CAN.checkReceive()) {
-    CAN.readMsgBuf(&rxId, &len, rxBuf);
-    if (rxId == 0x102) {
+  if (mcp2515.readMessage(&canMsgRecv) == MCP2515::ERROR_OK) {
+    if (canMsgRecv.can_id == 0x102) { // ID of partner node
       float receivedVal;
-      memcpy(&receivedVal, rxBuf, 4);
+      memcpy(&receivedVal, canMsgRecv.data, 4);
       Serial.printf("Received from Node 2: %.2f\n", receivedVal);
     }
   }
