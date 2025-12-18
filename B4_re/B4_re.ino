@@ -1,24 +1,15 @@
-#include <SPI.h>
-#include <mcp2515.h>
+#include "driver/twai.h"
 
+// --- การกำหนดขา (Wiring Config) ---
+// ขาที่ต่อกับ TJA1051
+#define RX_PIN 16  // ต่อกับขา RXD ของ TJA1051
+#define TX_PIN 17  // ต่อกับขา TXD ของ TJA1051
 
-#define CAN_TX_PIN GPIO_NUM_27
-#define CAN_RX_PIN GPIO_NUM_26
+// ขาสำหรับควบคุมอุปกรณ์ (Output)
+#define BRAKE_PIN 26 // ต่อกับ Relay เบรค
+#define LIGHT_PIN 27 // ต่อกับ Relay ไฟ
 
-// --- ตั้งค่าขา (Pin Config) ---
-// ถ้าใช้ Arduino Uno/Nano: CS = 10
-// ถ้าใช้ ESP32: CS = 5 (หรือตามที่ต่อจริง)
-const int SPI_CS_PIN = 10; 
-
-// ขาที่ต่อกับ Relay หรือ MOSFET เพื่อคุมอุปกรณ์
-const int BRAKE_PIN = 7;   // ต่อกับรีเลย์เบรค
-const int LIGHT_PIN = 8;   // ต่อกับรีเลย์ไฟ
-
-// สร้าง Object
-struct can_frame canMsg;
-MCP2515 mcp2515(SPI_CS_PIN);
-
-// ต้องตรงกับโค้ดตัวส่ง (Sender)
+// --- กำหนด ID คำสั่ง (ต้องตรงกับตัวส่ง) ---
 #define CMD_BRAKE_ID 0x100
 #define CMD_LIGHT_ID 0x101
 
@@ -28,48 +19,74 @@ void setup() {
   // ตั้งค่าขา Output
   pinMode(BRAKE_PIN, OUTPUT);
   pinMode(LIGHT_PIN, OUTPUT);
-  
-  // กำหนดสถานะเริ่มต้น (ปิด)
   digitalWrite(BRAKE_PIN, LOW);
   digitalWrite(LIGHT_PIN, LOW);
 
-  // เริ่มต้น SPI และ MCP2515
-  SPI.begin();
-  mcp2515.reset();
-  
-  // *** สำคัญมาก: ความเร็วต้องตรงกับตัวส่ง (500KBPS / 8MHZ) ***
-  mcp2515.setBitrate(CAN_500KBPS, MCP_8MHZ);
-  mcp2515.setNormalMode();
+  Serial.println("Initializing TWAI (CAN)...");
 
-  Serial.println("Receiver Unit Ready...");
-  Serial.println("Waiting for CAN Commands...");
+  // 1. ตั้งค่า Config ของ TWAI
+  twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT((gpio_num_t)TX_PIN, (gpio_num_t)RX_PIN, TWAI_MODE_NORMAL);
+  
+  // 2. ตั้งค่าความเร็ว (Timing) **สำคัญมาก ต้องตรงกับตัวส่ง (500Kbps)**
+  twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS();
+  
+  // 3. ตั้งค่า Filter (รับทุก ID)
+  twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
+
+  // ติดตั้ง Driver
+  if (twai_driver_install(&g_config, &t_config, &f_config) == ESP_OK) {
+    Serial.println("Driver installed");
+  } else {
+    Serial.println("Failed to install driver");
+    return;
+  }
+
+  // เริ่มการทำงาน
+  if (twai_start() == ESP_OK) {
+    Serial.println("Driver started. Waiting for commands...");
+  } else {
+    Serial.println("Failed to start driver");
+    return;
+  }
 }
 
 void loop() {
-  // ตรวจสอบว่ามีข้อมูลเข้ามาใน MCP2515 หรือไม่
-  if (mcp2515.readMessage(&canMsg) == MCP2515::ERROR_OK) {
+  twai_message_t message;
+
+  // รอรับข้อความ (Timeout 1ms เพื่อไม่ให้ loop ค้างนาน)
+  if (twai_receive(&message, pdMS_TO_TICKS(1)) == ESP_OK) {
     
-    // --- รับคำสั่งควบคุมเบรค (ID: 0x100) ---
-    if (canMsg.can_id == CMD_BRAKE_ID) {
-      // เช็คข้อมูล Byte ที่ 0 (ถ้าส่งมาเป็น 1 คือ ON, 0 คือ OFF)
-      if (canMsg.data[0] == 0x01) {
-        digitalWrite(BRAKE_PIN, HIGH); // สั่ง Relay ทำงาน
-        Serial.println("ACTION: BRAKE [ON]");
-      } else {
-        digitalWrite(BRAKE_PIN, LOW);  // สั่ง Relay หยุด
-        Serial.println("ACTION: BRAKE [OFF]");
+    // --- ส่วนประมวลผลคำสั่ง ---
+
+    // 1. ตรวจสอบคำสั่งเบรค (ID 0x100)
+    if (message.identifier == CMD_BRAKE_ID) {
+      if (message.data_length_code > 0) {
+        if (message.data[0] == 1) {
+          digitalWrite(BRAKE_PIN, HIGH);
+          Serial.println("CMD: BRAKE [ON]");
+        } else {
+          digitalWrite(BRAKE_PIN, LOW);
+          Serial.println("CMD: BRAKE [OFF]");
+        }
       }
     }
 
-    // --- รับคำสั่งควบคุมไฟ (ID: 0x101) ---
-    else if (canMsg.can_id == CMD_LIGHT_ID) {
-      if (canMsg.data[0] == 0x01) {
-        digitalWrite(LIGHT_PIN, HIGH); // เปิดไฟ
-        Serial.println("ACTION: LIGHT [ON]");
-      } else {
-        digitalWrite(LIGHT_PIN, LOW);  // ปิดไฟ
-        Serial.println("ACTION: LIGHT [OFF]");
+    // 2. ตรวจสอบคำสั่งไฟ (ID 0x101)
+    else if (message.identifier == CMD_LIGHT_ID) {
+      if (message.data_length_code > 0) {
+        if (message.data[0] == 1) {
+          digitalWrite(LIGHT_PIN, HIGH);
+          Serial.println("CMD: LIGHT [ON]");
+        } else {
+          digitalWrite(LIGHT_PIN, LOW);
+          Serial.println("CMD: LIGHT [OFF]");
+        }
       }
+    }
+    
+    // Debug: แสดง ID ที่ไม่รู้จัก (เผื่อเช็คว่ามีอะไรส่งมาบ้าง)
+    else {
+      Serial.printf("Unknown ID: 0x%X DLC: %d\n", message.identifier, message.data_length_code);
     }
   }
 }
