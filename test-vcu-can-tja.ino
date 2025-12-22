@@ -1,14 +1,26 @@
 #include "driver/twai.h"
-#define RX_PIN 26
-#define TX_PIN 27
+#define RX_PIN GPIO_NUM_26
+#define TX_PIN GPIO_NUM_27
 
 void setup() {
-  Serial.begin(115200);
   
   // 1. ตั้งค่า Config ของ TWAI
-  twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT((gpio_num_t)TX_PIN, (gpio_num_t)RX_PIN, TWAI_MODE_NORMAL);
-  twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS(); // ตั้งค่า Baudrate 500kbps
-  twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
+Serial.begin(115200);
+
+  // ---------- CAN CONFIG ----------
+  twai_general_config_t g_config =
+      TWAI_GENERAL_CONFIG_DEFAULT(TX_PIN, RX_PIN, TWAI_MODE_NORMAL);
+
+  twai_timing_config_t t_config =
+      TWAI_TIMING_CONFIG_500KBITS();
+
+  twai_filter_config_t f_config =
+      TWAI_FILTER_CONFIG_ACCEPT_ALL();
+
+  twai_driver_install(&g_config, &t_config, &f_config);
+  twai_start();
+
+  Serial.println("ESP32 CAN Receiver Ready @500kbps");
 
   // 2. ติดตั้ง Driver
   if (twai_driver_install(&g_config, &t_config, &f_config) == ESP_OK) {
